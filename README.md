@@ -3,6 +3,32 @@
 Esta versão transforma a antiga etapa de clima histórico em um **Climate Router**
 resiliente.
 
+## Executar o Django com uv
+
+Instale as dependências e prepare o banco local:
+
+```bash
+uv sync
+uv run python manage.py migrate
+uv run python manage.py check
+```
+
+Inicie o Studio Django e a REST API:
+
+```bash
+uv run python manage.py runserver 127.0.0.1:8000
+```
+
+Com o servidor ativo, acesse:
+
+- Studio web: <http://127.0.0.1:8000/>
+- Swagger UI: <http://127.0.0.1:8000/api/docs/>
+- OpenAPI schema: <http://127.0.0.1:8000/api/schema/>
+
+A API versionada está disponível em `/api/v1/`. A simulação do Produto usa
+`POST /api/v1/simulations/`; os payloads e endpoints auxiliares estão documentados
+em `docs/PREDICTA_API.md` e no Swagger.
+
 ```text
 HISTÓRICO / BASELINE / TREINO                 FUTURO OPERACIONAL
 ERA5-Land ARCO                                Open-Meteo / ECMWF forecast
