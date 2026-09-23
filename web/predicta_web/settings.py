@@ -13,6 +13,8 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'rest_framework',
+    'drf_spectacular',
     'web.studio',
 ]
 
@@ -60,3 +62,18 @@ PREDICTA_ALLOW_PIPELINE_EXECUTION = os.environ.get('PREDICTA_ALLOW_PIPELINE_EXEC
 PREDICTA_RUN_LOG_DIR = BASE_DIR / 'outputs' / 'web' / 'runs'
 PREDICTA_RUN_LOG_DIR.mkdir(parents=True, exist_ok=True)
 (BASE_DIR / 'data' / 'web').mkdir(parents=True, exist_ok=True)
+
+REST_FRAMEWORK = {
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+}
+
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'Predicta API',
+    'DESCRIPTION': 'API REST para a simulacao de tarifa dinamica do Predicta Studio.',
+    'VERSION': '1.0.0',
+    'SERVE_INCLUDE_SCHEMA': False,
+    'TAGS': [
+        {'name': 'Simulacao', 'description': 'Executa a mesma simulacao disponivel na pagina Produto.'},
+        {'name': 'Catalogo', 'description': 'Areas de concessao e perfis tarifarios.'},
+    ],
+}
