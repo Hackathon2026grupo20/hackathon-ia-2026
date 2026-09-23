@@ -16,8 +16,13 @@ dependencies = [
   "zarr>=2.18,<4",
   "fsspec>=2024.10",
   "httpio>=0.3",
-  "dask[array]>=2025.1"
+  "dask[array]>=2025.1",
+  "django>=5.2.17",
 ]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["predicta_climate*", "motor_sin*", "motor_tarifa*", "web*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
