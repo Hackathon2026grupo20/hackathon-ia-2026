@@ -8,7 +8,7 @@ charset-normalizer==3.5.1
 click==8.5.0
 cloudpickle==3.1.2
 dask==2026.8.0
-django==6.1.1
+django==5.2.17
 djangorestframework==3.16.1
 drf-spectacular==0.29.0
 donfig==0.8.1.post1
