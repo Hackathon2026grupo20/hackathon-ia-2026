@@ -4,7 +4,13 @@ import os
 BASE_DIR = Path(__file__).resolve().parents[2]
 SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', 'predicta-local-mvp-change-me')
 DEBUG = os.environ.get('DJANGO_DEBUG', '1') == '1'
-ALLOWED_HOSTS = [h.strip() for h in os.environ.get('DJANGO_ALLOWED_HOSTS', '127.0.0.1,localhost').split(',') if h.strip()]
+configured_hosts = os.environ.get('DJANGO_ALLOWED_HOSTS', '127.0.0.1,localhost').split(',')
+render_host = os.environ.get('RENDER_EXTERNAL_HOSTNAME', '')
+ALLOWED_HOSTS = sorted({
+    host.strip()
+    for host in [*configured_hosts, render_host, 'hackathon-ia-2026.onrender.com']
+    if host.strip()
+})
 
 INSTALLED_APPS = [
     'django.contrib.admin',
