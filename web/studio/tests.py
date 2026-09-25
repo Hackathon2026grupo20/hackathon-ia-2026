@@ -3,6 +3,14 @@ from django.urls import reverse
 
 
 class StudioWebSmokeTests(TestCase):
+    def test_human_date_component_formats_iso_and_date_values(self):
+        from django.template import Context, Template
+
+        template = Template('{% load date_display %}{% human_date value %}')
+        self.assertIn('02/01/2026 00:04', template.render(Context({'value': '2026-01-02T03:04:05.123Z'})))
+        self.assertIn('31/12/2025', template.render(Context({'value': '2025-12-31'})))
+        self.assertIn('>02/01/2026 00:04</time>', template.render(Context({'value': '2026-01-02T03:04:05.123Z'})))
+
     def test_main_pages_render_without_project_artifacts(self):
         for name in ['dashboard','automation','data','features','territory','modeling','validation','models','product','pipeline']:
             response=self.client.get(reverse(f'studio:{name}'))

@@ -1,4 +1,5 @@
 {% extends 'studio/base.html' %}
+{% load date_display %}
 {% block title %}Produto · Predicta{% endblock %}
 {% block content %}
 <section class="page-header product-header">
@@ -47,7 +48,7 @@
     </div>
 
     <label class="field"><span>Perfil tarifário ANEEL</span><select name="profile" id="profile-select" required><option value="">Selecione a localização primeiro…</option>{% for p in profiles %}<option value="{{ p.id }}" data-distributor="{{ p.distributor_id }}" data-base="{{ p.base_total_rs_kwh }}" data-te="{{ p.base_te_rs_kwh }}" data-tusd="{{ p.base_tusd_rs_kwh }}" data-effective="{{ p.effective_date }}" {% if p.id == selected_profile and p.distributor_id == selected_distributor %}selected{% endif %}>{{ p.label }} · R$ {{ p.base_total_rs_kwh|floatformat:4 }}/kWh</option>{% endfor %}</select><small>Por segurança do MVP, aparecem perfis volumétricos com posto UNIQUE e Tarifa de Aplicação vigentes na data selecionada.</small></label>
-    <div class="tariff-preview"><div><span>TE</span><strong id="preview-te">—</strong></div><div><span>TUSD</span><strong id="preview-tusd">—</strong></div><div class="emphasis"><span>TE + TUSD</span><strong id="preview-total">—</strong></div><div><span>Data de referência</span><strong id="preview-effective">{{ effective_date|default:'—' }}</strong></div></div>
+    <div class="tariff-preview"><div><span>TE</span><strong id="preview-te">—</strong></div><div><span>TUSD</span><strong id="preview-tusd">—</strong></div><div class="emphasis"><span>TE + TUSD</span><strong id="preview-total">—</strong></div><div><span>Data de referência</span><strong id="preview-effective">{% human_date effective_date %}</strong></div></div>
 
     <div class="two-fields"><label class="field"><span>Consumo mensal</span><div class="input-suffix"><input type="number" step="1" min="1" name="monthly_kwh" value="{{ monthly_kwh }}" required><b>kWh</b></div></label><label class="field"><span>Forma da curva</span><select name="customer_type"><option value="residential" {% if customer_type == 'residential' %}selected{% endif %}>Residencial</option><option value="commercial" {% if customer_type == 'commercial' %}selected{% endif %}>Comercial</option><option value="industrial_flat" {% if customer_type == 'industrial_flat' %}selected{% endif %}>Industrial plana</option></select></label></div>
     <label class="field"><span>Parcela potencialmente flexível do consumo</span><div class="input-suffix"><input type="number" step="5" min="0" max="80" name="flexible_pct" value="{{ flexible_pct }}" required><b>%</b></div><small>Usada apenas no cenário “consumo otimizado”. A energia total de 24h é preservada; o simulador desloca essa parcela para horas mais baratas com limite de concentração por hora.</small></label>

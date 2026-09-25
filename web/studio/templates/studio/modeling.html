@@ -1,12 +1,13 @@
 {% extends 'studio/base.html' %}
+{% load date_display %}
 {% block title %}Modelagem · Predicta{% endblock %}
 {% block content %}
 <section class="page-header"><div><p class="eyebrow">3 · Modelagem</p><h1>Treine uma configuração antes de promovê-la</h1><p>Escolha features, algoritmo e janela histórica. Esta etapa sempre termina em <b>validação held-out</b>; ela não altera o modelo ativo do produto.</p></div><div class="info-callout"><b>Quando entra XGBoost?</b> Aqui. Ele usa exatamente as mesmas features e o mesmo split temporal do Ridge, permitindo uma comparação justa.</div></section>
 
 <section class="panel">
   <div class="panel-head"><div><p class="eyebrow">Histórico disponível</p><h2>Escolha a janela de modelagem</h2></div><a href="{% url 'studio:data' %}">adicionar anos →</a></div>
-  {% if history.consolidated %}<p><b>{{ history.start }}</b> → <b>{{ history.end }}</b> · {{ history.rows }} linhas consolidadas.</p>{% else %}<div class="warning-box">Ainda não há histórico consolidado. Vá para Dados e adicione anos do ONS.</div>{% endif %}
-  <div class="coverage-row"><span><b>E1</b> usa todo o histórico ONS selecionado.</span><span><b>E2</b> clima: {% if history.climate_coverage.E2.exists %}{{ history.climate_coverage.E2.start }} → {{ history.climate_coverage.E2.end }}{% else %}não gerado{% endif %}</span><span><b>E3</b> clima/contexto: {% if history.climate_coverage.E3.exists %}{{ history.climate_coverage.E3.start }} → {{ history.climate_coverage.E3.end }}{% else %}não gerado{% endif %}</span></div>
+  {% if history.consolidated %}<p><b>{% human_date history.start %}</b> → <b>{% human_date history.end %}</b> · {{ history.rows }} linhas consolidadas.</p>{% else %}<div class="warning-box">Ainda não há histórico consolidado. Vá para Dados e adicione anos do ONS.</div>{% endif %}
+  <div class="coverage-row"><span><b>E1</b> usa todo o histórico ONS selecionado.</span><span><b>E2</b> clima: {% if history.climate_coverage.E2.exists %}{% human_date history.climate_coverage.E2.start %} → {% human_date history.climate_coverage.E2.end %}{% else %}não gerado{% endif %}</span><span><b>E3</b> clima/contexto: {% if history.climate_coverage.E3.exists %}{% human_date history.climate_coverage.E3.start %} → {% human_date history.climate_coverage.E3.end %}{% else %}não gerado{% endif %}</span></div>
   <small class="help-text">Se você escolher uma janela maior que a cobertura climática, E2/E3 serão <b>automaticamente recortados para a interseção real ONS + clima</b>. O log mostra a janela efetiva. E1 continua podendo usar todo o histórico ONS.</small>
 </section>
 
@@ -30,6 +31,6 @@
 
 <section class="panel"><div class="panel-head"><div><p class="eyebrow">Como interpretar</p><h2>Modelagem não é deployment</h2></div></div><div class="explain-grid"><div><b>Treino</b><p>Aprende relações no passado disponível.</p></div><div><b>Calibração</b><p>Reserva uma cauda anterior ao teste para p10/p90.</p></div><div><b>Teste</b><p>Simula origens históricas H01–H24 sem acesso ao futuro observado.</p></div><div><b>Depois</b><p>Se a configuração for escolhida, congele-a em Modelos. Só então pode virar modelo ativo.</p></div></div></section>
 
-{% if recent_runs %}<section class="panel"><h2>Execuções recentes</h2><div class="run-list">{% for run in recent_runs %}<a href="{% url 'studio:run_detail' run.id %}" class="run-row"><span class="badge status-{{ run.status|lower }}">{{ run.get_status_display }}</span><b>{{ run.stage_label }}</b><span>{{ run.created_at|date:'d/m H:i' }}</span></a>{% endfor %}</div></section>{% endif %}
+{% if recent_runs %}<section class="panel"><h2>Execuções recentes</h2><div class="run-list">{% for run in recent_runs %}<a href="{% url 'studio:run_detail' run.id %}" class="run-row"><span class="badge status-{{ run.status|lower }}">{{ run.get_status_display }}</span><b>{{ run.stage_label }}</b><span>{% human_date run.created_at %}</span></a>{% endfor %}</div></section>{% endif %}
 {% endblock %}
 {% block scripts %}<script>Predicta.bindAlgorithmForm('algorithm-select','xgb-params');</script>{% endblock %}

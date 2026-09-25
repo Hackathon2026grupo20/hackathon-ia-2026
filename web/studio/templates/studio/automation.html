@@ -1,4 +1,5 @@
 {% extends 'studio/base.html' %}
+{% load date_display %}
 {% block title %}Automação · Predicta{% endblock %}
 {% block content %}
 <section class="page-header automation-header">
@@ -140,8 +141,8 @@
 <section class="panel">
   <div class="panel-head"><div><h2>Última automação completa</h2><p>Status persistido em <code>outputs/reports/full_automation.json</code>.</p></div><span class="badge {% if 'SUCCESS' in automation_report.status %}status-success{% elif automation_report.status == 'FAILED' %}status-failed{% else %}status-running{% endif %}">{{ automation_report.status }}</span></div>
   <div class="explain-grid">
-    <div><b>Início</b><p>{{ automation_report.started_at_utc|default:'—' }}</p></div>
-    <div><b>Fim</b><p>{{ automation_report.finished_at_utc|default:'—' }}</p></div>
+    <div><b>Início</b><p>{% human_date automation_report.started_at_utc %}</p></div>
+    <div><b>Fim</b><p>{% human_date automation_report.finished_at_utc %}</p></div>
     <div><b>Etapas registradas</b><p>{{ automation_report.steps|length }}</p></div>
     <div><b>Operacional</b><p>{{ automation_report.operational_status|default:'não executado' }}</p></div>
   </div>
@@ -151,6 +152,6 @@
 
 <section class="panel">
   <div class="panel-head"><div><h2>Execuções recentes</h2><p>O processamento é disparado em background; abra o log para acompanhar cada etapa.</p></div></div>
-  <div class="run-list">{% for run in recent_runs %}<a class="run-row" href="{% url 'studio:run_detail' run.id %}"><span class="badge status-{{ run.status|lower }}">{{ run.status }}</span><span><b>{{ run.stage_label }}</b><small>{{ run.created_at }}</small></span><span>ver log →</span></a>{% empty %}<div class="empty-state">Nenhuma automação executada ainda.</div>{% endfor %}</div>
+  <div class="run-list">{% for run in recent_runs %}<a class="run-row" href="{% url 'studio:run_detail' run.id %}"><span class="badge status-{{ run.status|lower }}">{{ run.status }}</span><span><b>{{ run.stage_label }}</b><small>{% human_date run.created_at %}</small></span><span>ver log →</span></a>{% empty %}<div class="empty-state">Nenhuma automação executada ainda.</div>{% endfor %}</div>
 </section>
 {% endblock %}

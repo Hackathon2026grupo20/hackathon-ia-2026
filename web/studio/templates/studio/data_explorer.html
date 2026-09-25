@@ -1,4 +1,5 @@
 {% extends 'studio/base.html' %}
+{% load date_display %}
 {% block title %}Dados · Predicta{% endblock %}
 {% block content %}
 <section class="page-header"><div><p class="eyebrow">1 · Dados</p><h1>Monte e inspecione a base histórica</h1><p>Esta tela responde duas perguntas: <b>quais dados temos?</b> e <b>o que realmente entra no pipeline?</b>. Adicione anos do ONS antes de um novo ciclo de treino; o histórico consolidado é reconstruído sem apagar o RAW.</p></div><div class="info-callout"><b>Regra do MVP:</b> dados brutos são preservados. Treino usa os artefatos processados e versionados, não arquivos editados manualmente.</div></section>
@@ -7,12 +8,12 @@
 <section class="panel">
   <div class="panel-head"><div><p class="eyebrow">Carga ONS</p><h2>Histórico multi-ano</h2><p>Baixe anos ausentes e consolide uma única série horária por subsistema.</p></div></div>
   <div class="history-years">{% for y in history.raw_years %}<span class="year-chip ok">{{ y }} ✓</span>{% empty %}<span class="year-chip">nenhum RAW detectado</span>{% endfor %}</div>
-  {% if history.consolidated %}<p class="help-text"><b>Consolidado:</b> {{ history.start }} → {{ history.end }} · {{ history.rows }} linhas.</p>{% endif %}
+  {% if history.consolidated %}<p class="help-text"><b>Consolidado:</b> {% human_date history.start %} → {% human_date history.end %} · {{ history.rows }} linhas.</p>{% endif %}
   <form class="form-grid compact-form" method="post" action="{% url 'studio:run_stage' ons_stage.id %}">{% csrf_token %}
     {% for p in ons_stage.params %}<label class="field"><span>{{ p.label }}</span><input type="{{ p.kind }}" name="{{ p.name }}" value="{{ p.default }}"><small>{{ p.help }}</small></label>{% endfor %}
     <div class="form-action"><button class="button primary">Adicionar anos + consolidar</button></div>
   </form>
-  {% if history.subsystems %}<div class="table-wrap slim"><table><thead><tr><th>Subsistema</th><th>Linhas</th><th>Início</th><th>Fim</th></tr></thead><tbody>{% for s in history.subsystems %}<tr><td>{{ s.id }}</td><td>{{ s.rows }}</td><td>{{ s.start }}</td><td>{{ s.end }}</td></tr>{% endfor %}</tbody></table></div>{% endif %}
+  {% if history.subsystems %}<div class="table-wrap slim"><table><thead><tr><th>Subsistema</th><th>Linhas</th><th>Início</th><th>Fim</th></tr></thead><tbody>{% for s in history.subsystems %}<tr><td>{{ s.id }}</td><td>{{ s.rows }}</td><td>{% human_date s.start %}</td><td>{% human_date s.end %}</td></tr>{% endfor %}</tbody></table></div>{% endif %}
 </section>
 
 <section class="panel">
