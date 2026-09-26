@@ -68,6 +68,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 PREDICTA_PROJECT_ROOT = BASE_DIR
 PREDICTA_ALLOW_PIPELINE_EXECUTION = os.environ.get('PREDICTA_ALLOW_PIPELINE_EXECUTION', '1') == '1'
 PREDICTA_RUN_LOG_DIR = BASE_DIR / 'outputs' / 'web' / 'runs'
+PREDICTA_S3_CACHE_ROOT = BASE_DIR / 'data' / 'web' / 's3_cache'
 PREDICTA_RUN_LOG_DIR.mkdir(parents=True, exist_ok=True)
 (BASE_DIR / 'data' / 'web').mkdir(parents=True, exist_ok=True)
 

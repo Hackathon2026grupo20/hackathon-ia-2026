@@ -3,6 +3,42 @@ from django.urls import reverse
 
 
 class StudioWebSmokeTests(TestCase):
+    def test_dataset_path_uses_s3_prefix_and_caches_download(self):
+        import os
+        import tempfile
+        from pathlib import Path
+        from unittest.mock import patch
+
+        from django.test import override_settings
+        from web.studio.services.datasets import dataset_path
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            target = Path(temp_dir) / 'data' / 'processed' / 'sample.parquet'
+            client = patch('web.studio.services.datasets.boto3.client').start().return_value
+            client.download_file.side_effect = lambda bucket, key, filename: Path(filename).write_bytes(b'dataset')
+            try:
+                with patch.dict(os.environ, {'S3_ATANORA': 's3://atanora-data/predicta'}):
+                    with override_settings(PREDICTA_S3_CACHE_ROOT=Path(temp_dir)):
+                        self.assertEqual(dataset_path('data/processed/sample.parquet', Path('/missing/sample.parquet')), target)
+                        self.assertEqual(target.read_bytes(), b'dataset')
+                        self.assertEqual(dataset_path('data/processed/sample.parquet', Path('/missing/sample.parquet')), target)
+            finally:
+                patch.stopall()
+
+        client.download_file.assert_called_once_with('atanora-data', 'predicta/data/processed/sample.parquet', str(target))
+
+    def test_dataset_path_keeps_local_source_without_s3_configuration(self):
+        import os
+        from pathlib import Path
+        from unittest.mock import patch
+
+        from web.studio.services.datasets import dataset_path
+
+        with patch.dict(os.environ, {}, clear=False):
+            os.environ.pop('S3_ATANORA', None)
+            local = Path('/tmp/local-dataset.parquet')
+            self.assertEqual(dataset_path('data/processed/sample.parquet', local), local)
+
     def test_human_date_component_formats_iso_and_date_values(self):
         from django.template import Context, Template
 

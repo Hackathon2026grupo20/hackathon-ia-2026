@@ -7,6 +7,8 @@ import pandas as pd
 from django.conf import settings
 from motor_sin.common.io import read_table
 
+from .datasets import dataset_path, s3_configured
+
 ROOT=Path(settings.PREDICTA_PROJECT_ROOT)
 PROCESSED_GEO=ROOT/'data/processed/tariff/distributor_areas_wgs84.geojson'
 BUNDLED_GEO=ROOT/'configs/distributor_areas_wgs84.geojson'
@@ -16,13 +18,23 @@ TARIFFS=ROOT/'data/processed/tariff/base_tariffs.parquet'
 SIGNAL=ROOT/'outputs/contracts/system_signal_v1.parquet'
 
 
+def _dataset(relative_path: str, local_path: Path) -> Path:
+    return dataset_path(relative_path, local_path)
+
+
+def signal_path() -> Path:
+    return _dataset('outputs/contracts/system_signal_v1.parquet', SIGNAL)
+
+
 def cnpj_digits(v:str)->str:
     d=re.sub(r'\D','',str(v or ''))
     return d.zfill(14) if d else ''
 
 
 def geojson_path()->Path:
-    return PROCESSED_GEO if PROCESSED_GEO.exists() else BUNDLED_GEO
+    if s3_configured() or PROCESSED_GEO.exists():
+        return _dataset('data/processed/tariff/distributor_areas_wgs84.geojson', PROCESSED_GEO)
+    return _dataset('configs/distributor_areas_wgs84.geojson', BUNDLED_GEO)
 
 
 def geojson_payload()->dict:
@@ -32,7 +44,10 @@ def geojson_payload()->dict:
 
 
 def distributor_catalog()->pd.DataFrame:
-    p=PROCESSED_CATALOG if PROCESSED_CATALOG.exists() else BUNDLED_CATALOG
+    if s3_configured() or PROCESSED_CATALOG.exists():
+        p=_dataset('data/processed/tariff/distributor_catalog.csv', PROCESSED_CATALOG)
+    else:
+        p=_dataset('configs/distributor_catalog.csv', BUNDLED_CATALOG)
     if not p.exists(): return pd.DataFrame()
     df=pd.read_csv(p,dtype={'cnpj_digits':str})
     if 'cnpj_digits' in df: df['cnpj_digits']=df['cnpj_digits'].map(cnpj_digits)
@@ -49,16 +64,18 @@ def distributor_info(cnpj:str)->dict|None:
 
 
 def signal_date(region:str)->date|None:
-    if not SIGNAL.exists():return None
-    s=read_table(SIGNAL);g=s[(s.zone_type.astype(str)=='SUBSYSTEM')&(s.zone_id.astype(str)==str(region))]
+    p=signal_path()
+    if not p.exists():return None
+    s=read_table(p);g=s[(s.zone_type.astype(str)=='SUBSYSTEM')&(s.zone_id.astype(str)==str(region))]
     if g.empty:return None
     ts=pd.to_datetime(g.interval_start_utc,utc=True).min().tz_convert(ZoneInfo('America/Sao_Paulo'))
     return ts.date()
 
 
 def tariff_profiles_for_cnpj(cnpj:str,region:str|None=None,effective_date:date|None=None)->list[dict]:
-    if not TARIFFS.exists():return []
-    key=cnpj_digits(cnpj);df=read_table(TARIFFS)
+    tariffs_path = _dataset('data/processed/tariff/base_tariffs.parquet', TARIFFS)
+    if not tariffs_path.exists():return []
+    key=cnpj_digits(cnpj);df=read_table(tariffs_path)
     if 'distributor_cnpj' not in df.columns:return []
     df=df.copy();df['distributor_cnpj']=df['distributor_cnpj'].map(cnpj_digits)
     d=effective_date or (signal_date(region) if region else None) or date.today()
@@ -93,8 +110,9 @@ def tariff_profiles_for_cnpj(cnpj:str,region:str|None=None,effective_date:date|N
 
 def available_signal_regions()->dict[str,bool]:
     regions={'N':False,'NE':False,'SE/CO':False,'S':False}
-    if SIGNAL.exists():
-        s=read_table(SIGNAL)
+    p=signal_path()
+    if p.exists():
+        s=read_table(p)
         for z in s[s.zone_type.astype(str).eq('SUBSYSTEM')].zone_id.astype(str).unique():
             if z in regions:regions[z]=True
     return regions

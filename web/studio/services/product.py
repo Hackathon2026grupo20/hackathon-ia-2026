@@ -22,6 +22,7 @@ from .distribution import (
     distributor_info,
     tariff_profiles_for_cnpj,
 )
+from .datasets import dataset_path, s3_configured
 
 ROOT = Path(settings.PREDICTA_PROJECT_ROOT)
 DISPLAY_TIMEZONE = 'America/Sao_Paulo'
@@ -34,22 +35,32 @@ E3_CLIMATE = ROOT / 'data/processed/climate/zone_climate_hourly_e3.parquet'
 SUPPLY_HISTORY = ROOT / 'data/processed/generation/supply_by_subsystem_hourly.parquet'
 
 
+def _dataset(relative_path: str, local_path: Path) -> Path:
+    return dataset_path(relative_path, local_path)
+
+
+def _path_exists(relative_path: str, local_path: Path) -> bool:
+    return _dataset(relative_path, local_path).exists()
+
+
 def available_regions():
     return available_signal_regions()
 
 
 def distributors():
     # Kept for backward compatibility; new product flow is CNPJ/map based.
-    if not TARIFFS.exists():
+    tariffs_path = _dataset('data/processed/tariff/base_tariffs.parquet', TARIFFS)
+    if not tariffs_path.exists():
         return []
-    df = read_table(TARIFFS)
+    df = read_table(tariffs_path)
     return sorted(df.distributor_id.dropna().astype(str).unique().tolist())
 
 
 def profiles_for(distributor: str, region: str = 'SE/CO'):
-    if not TARIFFS.exists() or not distributor:
+    tariffs_path = _dataset('data/processed/tariff/base_tariffs.parquet', TARIFFS)
+    if not tariffs_path.exists() or not distributor:
         return []
-    df = read_table(TARIFFS)
+    df = read_table(tariffs_path)
     cnpj = ''
     if 'distributor_cnpj' in df.columns:
         m = df[df.distributor_id.astype(str).eq(distributor)]
@@ -102,8 +113,10 @@ def _window_descriptor(frame: pd.DataFrame, *, key: str, source: str, issue_time
 def replay_windows(region: str | None = None) -> list[dict]:
     """List historical 24h windows available for the product replay selector."""
     windows: list[dict] = []
-    if E3_PREDICTIONS.exists():
-        p = read_table(E3_PREDICTIONS)
+    predictions_path = _dataset('outputs/metrics/e3_real_pilot_predictions.parquet', E3_PREDICTIONS)
+    signal_path = _dataset('outputs/contracts/system_signal_v1.parquet', SIGNAL)
+    if predictions_path.exists():
+        p = read_table(predictions_path)
         if {'issue_time_utc', 'interval_start_utc', 'subsystem_id'}.issubset(p.columns):
             if 'experiment' in p.columns:
                 p = p[p['experiment'].astype(str).eq('E3')]
@@ -124,8 +137,8 @@ def replay_windows(region: str | None = None) -> list[dict]:
                     continue
                 key = pd.Timestamp(issue).isoformat()
                 windows.append(_window_descriptor(g.sort_values('interval_start_utc').head(24), key=key, source='E3_BACKTEST', issue_time_utc=pd.Timestamp(issue)))
-    if not windows and SIGNAL.exists():
-        s = read_table(SIGNAL)
+    if not windows and signal_path.exists():
+        s = read_table(signal_path)
         s = s[s['zone_type'].astype(str).eq('SUBSYSTEM')].copy()
         if region:
             s = s[s['zone_id'].astype(str).eq(str(region))]
@@ -145,9 +158,10 @@ def replay_window(region: str, key: str | None) -> dict | None:
 
 
 def _load_current_signal(region: str) -> pd.DataFrame:
-    if not SIGNAL.exists():
+    signal_path = _dataset('outputs/contracts/system_signal_v1.parquet', SIGNAL)
+    if not signal_path.exists():
         return pd.DataFrame()
-    s = read_table(SIGNAL)
+    s = read_table(signal_path)
     s['interval_start_utc'] = pd.to_datetime(s['interval_start_utc'], utc=True, errors='raise')
     return s[(s['zone_type'].astype(str).eq('SUBSYSTEM')) & (s['zone_id'].astype(str).eq(str(region)))].sort_values('interval_start_utc').copy()
 
@@ -196,10 +210,14 @@ def _signal_for_replay(region: str, replay_key: str | None) -> tuple[pd.DataFram
     w = replay_window(region, replay_key)
     if not w:
         raise ValueError(f'Não há janela histórica completa de 24h para {region}.')
-    if w['source'] == 'E3_BACKTEST' and E3_PREDICTIONS.exists():
-        if not LOAD_HISTORY.exists():
+    predictions_path = _dataset('outputs/metrics/e3_real_pilot_predictions.parquet', E3_PREDICTIONS)
+    load_path = _dataset('data/processed/demand/load_hourly.parquet', LOAD_HISTORY)
+    climate_path = _dataset('data/processed/climate/zone_climate_hourly_e3.parquet', E3_CLIMATE)
+    supply_path = _dataset('data/processed/generation/supply_by_subsystem_hourly.parquet', SUPPLY_HISTORY)
+    if w['source'] == 'E3_BACKTEST' and predictions_path.exists():
+        if not load_path.exists():
             raise ValueError('Histórico de carga não encontrado; necessário para reconstruir D no replay.')
-        p = read_table(E3_PREDICTIONS)
+        p = read_table(predictions_path)
         if 'experiment' in p.columns:
             p = p[p['experiment'].astype(str).eq('E3')]
         p['issue_time_utc'] = pd.to_datetime(p['issue_time_utc'], utc=True, errors='raise')
@@ -209,11 +227,11 @@ def _signal_for_replay(region: str, replay_key: str | None) -> tuple[pd.DataFram
         forecast = p[(p['subsystem_id'].astype(str).eq(str(region))) & (p['issue_time_utc'].eq(issue))].copy()
         if len(forecast) != 24:
             raise ValueError(f'A janela selecionada possui {len(forecast)} horas E3; esperado 24.')
-        climate = read_table(E3_CLIMATE) if E3_CLIMATE.exists() else None
-        supply = read_table(SUPPLY_HISTORY) if SUPPLY_HISTORY.exists() else None
+        climate = read_table(climate_path) if climate_path.exists() else None
+        supply = read_table(supply_path) if supply_path.exists() else None
         signal = build_real_system_signal(
             forecast=forecast,
-            load_history=read_table(LOAD_HISTORY),
+            load_history=read_table(load_path),
             climate_context=climate,
             run_id=f"web-replay-{issue.strftime('%Y%m%dT%H%MZ')}",
             calendar_timezone=DISPLAY_TIMEZONE,
@@ -264,10 +282,11 @@ def simulate_customer(
     replay_key: str | None = None,
     flexible_fraction: float = 0.20,
 ):
-    if not TARIFFS.exists():
+    tariffs_path = _dataset('data/processed/tariff/base_tariffs.parquet', TARIFFS)
+    if not tariffs_path.exists():
         raise ValueError('Tarifas processadas ainda não existem; prepare GeoJSON + tarifas ANEEL na etapa Dados.')
     signal, window = resolve_signal(region, mode, replay_key)
-    tariffs = read_table(TARIFFS)
+    tariffs = read_table(tariffs_path)
     z = signal[(signal.zone_type.astype(str) == 'SUBSYSTEM') & (signal.zone_id.astype(str) == region)].copy()
     if len(z) != 24:
         raise ValueError(f'Região {region} não possui exatamente 24 horas de sinal para a janela escolhida.')
