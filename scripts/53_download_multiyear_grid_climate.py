@@ -132,16 +132,57 @@ def main() -> None:
     p.add_argument('--history-backend', choices=['auto','arco','openmeteo','openmeteo-fallback-arco'], default='auto', help='Historical provider. auto/arco route missing cache through local ARCO adapter; openmeteo keeps legacy Archive API; openmeteo-fallback-arco switches to ARCO after rate-limit defer.')
     p.add_argument('--arco-proxy-startup-timeout', type=float, default=90.0)
     p.add_argument('--batch-size', type=int, default=6, help='Coordinates per request for hourly history.')
-    p.add_argument('--daily-batch-size', type=int, default=24, help='Coordinates per request for daily E3/baseline. Larger than hourly to cut request count.')
+    p.add_argument('--daily-batch-size', type=int, default=6, help='Coordinates per request for daily E3/baseline. Larger than hourly to cut request count.')
     p.add_argument('--request-delay', type=float, default=2.0, help='Pause after every successful spatial batch.')
     p.add_argument('--max-retries', type=int, default=10)
     p.add_argument('--backoff', type=float, default=10.0)
     p.add_argument('--cooldown-after-429', type=int, default=3, help='Consecutive 429s before a process-wide cooldown.')
     p.add_argument('--cooldown-seconds', type=float, default=90.0)
-    p.add_argument('--timeout', type=int, default=120)
+    p.add_argument('--timeout', type=int, default=600)
     p.add_argument('--checkpoint', help='Progress JSON. Defaults next to --report.')
     p.add_argument('--report', required=True)
     a = p.parse_args()
+
+    # PREDICTA_LANDMASK_CACHE_PREFLIGHT_V2
+    # Quarantine only cached RAW records whose temperature series is entirely
+    # null. They become ordinary gaps and are re-fetched by this same script
+    # through the ARCO nearest-valid-land fallback.
+    import subprocess
+    e2_parent = Path(a.e2_raw_dir).parent
+    e3_parent = Path(a.e3_raw_dir).parent
+    if e2_parent == e3_parent:
+        region_cache_root = e2_parent
+        store_root = region_cache_root.parent
+        quarantine_root = (
+            store_root.with_name(store_root.name + "_quarantine")
+            / region_cache_root.name
+            / "null_landmask"
+        )
+        validator = Path(__file__).resolve().with_name(
+            "65_quarantine_null_landmask_cache.py"
+        )
+        if validator.exists():
+            report_dir = Path(a.report).parent
+            preflight_report = report_dir / (
+                f"{region_cache_root.name}_null_landmask_quarantine.json"
+            )
+            proc = subprocess.run(
+                [
+                    sys.executable,
+                    str(validator),
+                    "--root",
+                    str(region_cache_root),
+                    "--quarantine-root",
+                    str(quarantine_root),
+                    "--report",
+                    str(preflight_report),
+                ],
+                check=False,
+            )
+            if proc.returncode != 0:
+                raise SystemExit(
+                    f"land-mask cache preflight failed with code {proc.returncode}"
+                )
     if a.archive_url:
         os.environ['PREDICTA_OPENMETEO_ARCHIVE_URL']=str(a.archive_url).strip()
 

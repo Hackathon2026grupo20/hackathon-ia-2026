@@ -97,6 +97,18 @@ def wind_direction_deg(u: np.ndarray, v: np.ndarray) -> np.ndarray:
     return (270.0 - np.degrees(np.arctan2(v, u))) % 360.0
 
 
+def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    r = 6371.0088
+    p1 = math.radians(lat1)
+    p2 = math.radians(lat2)
+    dp = math.radians(lat2 - lat1)
+    dl = math.radians(lon2 - lon1)
+    a = math.sin(dp / 2.0) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dl / 2.0) ** 2
+    return 2.0 * r * math.asin(min(1.0, math.sqrt(a)))
+
+
+
+
 class ArcoAdapter:
     def __init__(self) -> None:
         self.key = load_cds_api_key()
@@ -127,6 +139,147 @@ class ArcoAdapter:
             .transpose('time', 'point')
             .load()
         )
+
+    def _resolve_land_points(
+        self,
+        lats: list[float],
+        lons: list[float],
+        utc_start: pd.Timestamp,
+        utc_end: pd.Timestamp,
+        *,
+        max_radius_cells: int = 6,
+        max_distance_km: float = 80.0,
+    ) -> tuple[list[float], list[float], list[dict | None]]:
+        """
+        Resolve Predicta coordinates to a valid ERA5-Land cell.
+
+        Coastal Predicta cells are centred on .05 coordinates while ERA5-Land
+        is a land-masked 0.1-degree grid. A nearest-neighbour tie can therefore
+        land on an ocean pixel and produce an all-NaN annual series.
+
+        We keep the Predicta target coordinate/cell_id unchanged, but sample all
+        ERA5-Land core variables from the geographically nearest valid land
+        pixel. The fallback is explicit in _predicta_provenance.
+        """
+        ds = self._open('temperature')
+        name = resolve_var(ds, 't2m')
+        lat_values = np.asarray(ds['latitude'].values, dtype=float)
+        lon_values = np.asarray(ds['longitude'].values, dtype=float)
+
+        # The land mask is effectively static. Use three representative times
+        # so a transient missing value cannot be mistaken for an ocean pixel.
+        start_naive = utc_start.tz_localize(None)
+        end_naive = utc_end.tz_localize(None)
+        midpoint = start_naive + (end_naive - start_naive) / 2
+        sample_times = [
+            start_naive.to_datetime64(),
+            midpoint.to_datetime64(),
+            end_naive.to_datetime64(),
+        ]
+
+        resolved_lats = list(map(float, lats))
+        resolved_lons = list(map(float, lons))
+        fallback_meta: list[dict | None] = [None] * len(lats)
+
+        def nearest_index(values: np.ndarray, target: float) -> int:
+            return int(np.nanargmin(np.abs(values - target)))
+
+        for point_i, (target_lat, target_lon) in enumerate(zip(lats, lons)):
+            lat0 = nearest_index(lat_values, target_lat)
+            lon0 = nearest_index(lon_values, target_lon)
+
+            candidates: list[tuple[int, int, float]] = []
+            for radius in range(0, int(max_radius_cells) + 1):
+                candidates.clear()
+                lat_lo = max(0, lat0 - radius)
+                lat_hi = min(len(lat_values) - 1, lat0 + radius)
+                lon_lo = max(0, lon0 - radius)
+                lon_hi = min(len(lon_values) - 1, lon0 + radius)
+
+                # Only the perimeter is new at each radius. For radius=0 this
+                # evaluates the ordinary nearest cell.
+                for li in range(lat_lo, lat_hi + 1):
+                    for lj in range(lon_lo, lon_hi + 1):
+                        if radius and li not in {lat_lo, lat_hi} and lj not in {lon_lo, lon_hi}:
+                            continue
+                        clat = float(lat_values[li])
+                        clon = float(lon_values[lj])
+                        dist = haversine_km(float(target_lat), float(target_lon), clat, clon)
+                        if dist <= float(max_distance_km):
+                            candidates.append((li, lj, dist))
+
+                if not candidates:
+                    continue
+
+                # Evaluate all candidate pixels as paired points and across
+                # representative times. A valid land cell only needs one
+                # finite representative value; ERA5-Land then supplies the
+                # complete requested time series for that pixel.
+                li_idx = xr.DataArray(
+                    np.asarray([x[0] for x in candidates], dtype=int),
+                    dims='candidate',
+                )
+                lj_idx = xr.DataArray(
+                    np.asarray([x[1] for x in candidates], dtype=int),
+                    dims='candidate',
+                )
+                values = []
+                for t in sample_times:
+                    v = (
+                        ds[name]
+                        .isel(latitude=li_idx, longitude=lj_idx)
+                        .sel(time=t, method='nearest')
+                        .load()
+                    )
+                    values.append(np.asarray(v.values, dtype=float).reshape(-1))
+                sample_matrix = np.vstack(values)
+                valid = np.isfinite(sample_matrix).any(axis=0)
+
+                if valid.any():
+                    valid_candidates = [
+                        candidates[j] for j, ok in enumerate(valid.tolist()) if ok
+                    ]
+                    li, lj, distance_km = min(valid_candidates, key=lambda x: x[2])
+                    source_lat = float(lat_values[li])
+                    source_lon = float(lon_values[lj])
+                    resolved_lats[point_i] = source_lat
+                    resolved_lons[point_i] = source_lon
+
+                    # Only mark fallback if the selected physical ERA5-Land
+                    # pixel is materially different from the pixel that plain
+                    # nearest-neighbour would have selected.
+                    nearest_lat = float(lat_values[lat0])
+                    nearest_lon = float(lon_values[lon0])
+                    if li != lat0 or lj != lon0:
+                        fallback_meta[point_i] = {
+                            'applied': True,
+                            'reason': 'nearest_era5_land_pixel_all_nan_land_mask',
+                            'method': 'nearest_valid_era5_land_pixel',
+                            'target_latitude': float(target_lat),
+                            'target_longitude': float(target_lon),
+                            'source_latitude': source_lat,
+                            'source_longitude': source_lon,
+                            'plain_nearest_latitude': nearest_lat,
+                            'plain_nearest_longitude': nearest_lon,
+                            'distance_km': round(float(distance_km), 3),
+                            'max_radius_cells': int(max_radius_cells),
+                        }
+                        print(
+                            'ARCO_LAND_FALLBACK '
+                            f'target={target_lat:.5f},{target_lon:.5f} '
+                            f'source={source_lat:.5f},{source_lon:.5f} '
+                            f'distance_km={distance_km:.2f}',
+                            flush=True,
+                        )
+                    break
+            else:
+                raise RuntimeError(
+                    'ERA5-Land: no valid land pixel found within '
+                    f'{max_radius_cells} grid cells / {max_distance_km:.1f} km '
+                    f'for target {target_lat},{target_lon}'
+                )
+
+        return resolved_lats, resolved_lons, fallback_meta
 
     def fetch(self, *, lats: list[float], lons: list[float], start_date: str, end_date: str, timezone_names: list[str] | str, hourly: list[str], daily: list[str], windspeed_unit: str) -> list[dict]:
         if len(lats) != len(lons) or not lats:
@@ -176,20 +329,33 @@ class ArcoAdapter:
         need_gust = 'wind_gusts_10m' in hourly or 'wind_gusts_10m_max' in daily
         need_rad = 'shortwave_radiation' in hourly or 'shortwave_radiation_sum' in daily
 
+        # ERA5-Land is land-masked. Resolve coastal/ocean-tie points once and
+        # use the same valid land pixel consistently for every ERA5-Land core
+        # variable. The requested Predicta coordinate remains unchanged in the
+        # returned payload.
+        needs_land = need_t or need_td or need_p or need_tp or need_wind or need_rad
+        if needs_land:
+            land_lats, land_lons, land_fallbacks = self._resolve_land_points(
+                lats, lons, utc_start, utc_end
+            )
+        else:
+            land_lats, land_lons = list(lats), list(lons)
+            land_fallbacks = [None] * len(lats)
+
         arrays: dict[str, xr.DataArray] = {}
         if need_t:
-            arrays['t2m'] = self._select('temperature', 't2m', lats, lons, utc_start, utc_end)
+            arrays['t2m'] = self._select('temperature', 't2m', land_lats, land_lons, utc_start, utc_end)
         if need_td:
-            arrays['d2m'] = self._select('temperature', 'd2m', lats, lons, utc_start, utc_end)
+            arrays['d2m'] = self._select('temperature', 'd2m', land_lats, land_lons, utc_start, utc_end)
         if need_p:
-            arrays['sp'] = self._select('precipitation', 'sp', lats, lons, utc_start, utc_end)
+            arrays['sp'] = self._select('precipitation', 'sp', land_lats, land_lons, utc_start, utc_end)
         if need_tp:
-            arrays['tp'] = self._select('precipitation', 'tp', lats, lons, utc_start, utc_end)
+            arrays['tp'] = self._select('precipitation', 'tp', land_lats, land_lons, utc_start, utc_end)
         if need_wind:
-            arrays['u10'] = self._select('wind', 'u10', lats, lons, utc_start, utc_end)
-            arrays['v10'] = self._select('wind', 'v10', lats, lons, utc_start, utc_end)
+            arrays['u10'] = self._select('wind', 'u10', land_lats, land_lons, utc_start, utc_end)
+            arrays['v10'] = self._select('wind', 'v10', land_lats, land_lons, utc_start, utc_end)
         if need_rad:
-            arrays['ssrd'] = self._select('radiation', 'ssrd', lats, lons, utc_start, utc_end)
+            arrays['ssrd'] = self._select('radiation', 'ssrd', land_lats, land_lons, utc_start, utc_end)
         if need_gust:
             # ERA5-Land ARCO does not expose gust in its current subset. Use the
             # official ERA5 single-level ARCO gust (0.25°), sampled nearest to
@@ -307,6 +473,7 @@ class ArcoAdapter:
                 'historical_backend': 'ARCO',
                 'core_source': 'ERA5-Land ARCO 0.1°',
                 'gust_source': 'ERA5 single-level ARCO 0.25° nearest-neighbour' if need_gust else None,
+                'spatial_fallback': land_fallbacks[i],
             }
             results.append(result)
         return results

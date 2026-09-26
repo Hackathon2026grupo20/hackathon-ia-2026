@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "selection_metric": "WAPE",
+  "validation_hours": 720,
+  "regions": {
+    "N": {
+      "experiment": "E2",
+      "algorithm": "ridge",
+      "model_family_id": "E2_RIDGE_N_AUTO",
+      "model_dir": "models/demand/e2_ridge_n_auto",
+      "validation_wape": 0.0164
+    },
+    "NE": {
+      "experiment": "E3",
+      "algorithm": "xgboost",
+      "model_family_id": "E3_XGBOOST_NE_AUTO",
+      "model_dir": "models/demand/e3_xgboost_ne_auto",
+      "validation_wape": 0.0177
+    },
+    "SE/CO": {
+      "experiment": "E2",
+      "algorithm": "xgboost",
+      "model_family_id": "E2_XGBOOST_SECO_AUTO",
+      "model_dir": "models/demand/e2_xgboost_seco_auto",
+      "validation_wape": 0.0203
+    },
+    "S": {
+      "experiment": "E2",
+      "algorithm": "xgboost",
+      "model_family_id": "E2_XGBOOST_S_AUTO",
+      "model_dir": "models/demand/e2_xgboost_s_auto",
+      "validation_wape": 0.0313
+    }
+  }
+}
