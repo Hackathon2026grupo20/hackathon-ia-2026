@@ -44,3 +44,54 @@ class SimulationOptionsSerializer(serializers.Serializer):
     replay_windows = serializers.ListField(child=serializers.DictField())
     simulation_available = serializers.BooleanField()
     display_timezone = serializers.CharField()
+
+
+class StageParamSerializer(serializers.Serializer):
+    name = serializers.CharField()
+    label = serializers.CharField()
+    kind = serializers.CharField()
+    default = serializers.CharField(allow_blank=True)
+    help = serializers.CharField(allow_blank=True)
+    choices = serializers.ListField(child=serializers.ListField(child=serializers.CharField()))
+    required = serializers.BooleanField()
+
+
+class StageSerializer(serializers.Serializer):
+    id = serializers.CharField()
+    section = serializers.CharField()
+    title = serializers.CharField()
+    summary = serializers.CharField()
+    explanation = serializers.CharField()
+    why = serializers.CharField()
+    status = serializers.CharField()
+    required = serializers.ListField(child=serializers.DictField())
+    outputs = serializers.ListField(child=serializers.DictField())
+    params = StageParamSerializer(many=True)
+
+
+class StageRunRequestSerializer(serializers.Serializer):
+    """Body is a free-form map of {param_name: value}; every Stage.params entry is optional
+    and falls back to its registry default when omitted, so this stays a passthrough DictField
+    instead of a fixed schema (each stage has a different param set)."""
+    params = serializers.DictField(required=False, default=dict)
+
+
+class PipelineRunSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    stage_id = serializers.CharField()
+    stage_label = serializers.CharField()
+    status = serializers.CharField()
+    parameters = serializers.DictField()
+    return_code = serializers.IntegerField(allow_null=True)
+    error_message = serializers.CharField(allow_blank=True)
+    created_at = serializers.DateTimeField()
+    started_at = serializers.DateTimeField(allow_null=True)
+    finished_at = serializers.DateTimeField(allow_null=True)
+    log_tail = serializers.CharField(allow_blank=True)
+
+
+class DataUploadResponseSerializer(serializers.Serializer):
+    dataset = serializers.CharField()
+    path = serializers.CharField()
+    rows = serializers.IntegerField()
+    columns = serializers.ListField(child=serializers.CharField())

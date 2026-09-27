@@ -86,6 +86,8 @@ SPECTACULAR_SETTINGS = {
     'TAGS': [
         {'name': 'Simulacao', 'description': 'Executa a mesma simulacao disponivel na pagina Produto.'},
         {'name': 'Catalogo', 'description': 'Areas de concessao e perfis tarifarios.'},
+        {'name': 'Pipeline', 'description': 'Dispara e acompanha etapas de retreino/engenharia de features.'},
+        {'name': 'Dados', 'description': 'Upload de dados brutos/processados para retreino.'},
     ],
 }
 
@@ -99,3 +101,8 @@ CORS_ALLOWED_ORIGINS = [
     if origin.strip()
 ]
 CORS_URLS_REGEX = r'^/api/.*$'
+# Previews do Vercel ganham um subdominio novo a cada push, entao nao cabem na lista fixa.
+CORS_ALLOWED_ORIGIN_REGEXES = [
+    r'^https://[a-zA-Z0-9-]+\.vercel\.app$',
+]
+CSRF_TRUSTED_ORIGINS = [*CORS_ALLOWED_ORIGINS, 'https://*.vercel.app']
