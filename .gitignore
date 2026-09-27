@@ -8,6 +8,32 @@ __pycache__/
 outputs/
 *.partial
 
+# Exceções: seed mínimo de dados (região SE/CO) para que um clone limpo consiga
+# rodar a API e o Studio sem refazer todo o pipeline de ETL. Ver docs/DEV_SETUP.md.
+# Git não entra em diretório excluído, então cada nível precisa ser reaberto (!dir/)
+# e ter o conteúdo re-excluído (dir/*) antes de liberar o arquivo específico.
+!/data/
+/data/*
+!/data/processed/
+/data/processed/*
+!/data/processed/demand/
+/data/processed/demand/*
+!/data/processed/demand/load_hourly.parquet
+!/data/processed/generation/
+/data/processed/generation/*
+!/data/processed/generation/supply_by_subsystem_hourly.parquet
+!/data/processed/climate/
+/data/processed/climate/*
+!/data/processed/climate/zone_climate_hourly_e3.parquet
+!/data/processed/tariff/
+/data/processed/tariff/*
+!/data/processed/tariff/base_tariffs.parquet
+!outputs/
+outputs/*
+!outputs/metrics/
+outputs/metrics/*
+!outputs/metrics/e3_real_pilot_predictions.parquet
+
 
 # Created by https://www.toptal.com/developers/gitignore/api/django
 # Edit at https://www.toptal.com/developers/gitignore?templates=django

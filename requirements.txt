@@ -31,6 +31,7 @@ pluggy==1.6.0
 -e file:///home/raul/Projetos/hackathon-ia-2026
 propcache==0.5.4
 pyarrow==21.0.0
+pydantic==2.13.5
 pygments==2.21.0
 pytest==9.1.1
 python-dateutil==2.9.0.post0
